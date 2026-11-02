@@ -1,123 +1,169 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>*,*::before,*::after{box-sizing:border-box}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Joyce 提词器</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="提词器">
 <meta name="theme-color" content="#0d0e11">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@600;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one-screen app. Library -> editor -> full-bleed prompter. Dark by design (prompters are read in dim rooms). */
+/* Layout: one-screen app. Library -> editor -> full-bleed prompter (+ camera, takes). Dark by design: prompters are read in dim rooms. */
 :root{
-  --ink:#0d0e11; --panel:#16181d; --line:#262a31; --mute:#8a8f99;
-  --paper:#f1ede4; --amber:#f2b33d; --rec:#e5484d; --cue:#6fb3c9;
+  --ink:#0d0e11; --panel:#16181d; --panel2:#1d2026; --line:#262a31; --mute:#8a8f99;
+  --paper:#f1ede4; --amber:#f2b33d; --rec:#e5484d; --cue:#6fb3c9; --ok:#5fbf8a;
   --f-ui:"Noto Sans SC","PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
+  --f-serif:"Noto Serif SC","Songti SC",serif;
   --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
   color-scheme:dark;
 }
 html,body{height:100%}
 body{background:var(--ink);color:var(--paper);font-family:var(--f-ui);font-size:15px;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
-button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
 
 /* ---------- shell ---------- */
-.view{min-height:100%;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px;max-width:720px;margin:0 auto;box-sizing:border-box}
-.top{display:flex;align-items:center;gap:12px;padding-block:8px 16px}
+.view{min-height:100%;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px;max-width:720px;margin:0 auto}
+.top{display:flex;align-items:center;gap:8px;padding-block:8px 16px}
 .top h1{font-size:22px;font-weight:900;margin:0;letter-spacing:.02em;flex:1;min-width:0}
-.top h1 small{display:block;font-size:12px;font-weight:400;color:var(--mute);letter-spacing:.08em;margin-top:2px}
+.top h1 small{display:block;font-size:12px;font-weight:400;color:var(--mute);letter-spacing:.06em;margin-top:2px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-size:14px;white-space:nowrap}
 .btn.primary{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:700}
 .btn.ghost{background:none}
 .btn.danger{color:var(--rec);border-color:#4a2224}
+.btn.sm{height:34px;padding:0 10px;font-size:13px;border-radius:8px}
 .icon{width:40px;padding:0}
-svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.badge{font-size:11px;min-width:18px;height:18px;border-radius:9px;background:var(--rec);color:#fff;display:inline-grid;place-items:center;padding:0 5px;margin-left:-2px}
 
 /* library */
 .list{display:grid;gap:10px}
-.card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:14px 14px 14px 16px;border-radius:12px;background:var(--panel);border:1px solid var(--line);text-align:left;width:100%}
+.card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:14px 14px 14px 16px;border-radius:12px;background:var(--panel);border:1px solid var(--line);text-align:left;width:100%;cursor:pointer}
 .card .t{font-weight:700;font-size:16px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card .p{grid-column:1;color:var(--mute);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card .m{grid-column:1;font-size:12px;color:var(--mute)}
-.card .go{grid-row:1/4;grid-column:2;width:44px;height:44px;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center}
+.card .go{grid-row:1/4;grid-column:2;width:46px;height:46px;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center}
 .card .go svg{fill:currentColor;stroke:none}
 .tag{display:inline-block;font-size:11px;color:var(--amber);border:1px solid #4d3a12;border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:2px;font-weight:500}
-.empty{color:var(--mute);text-align:center;padding:48px 0}
+.empty{color:var(--mute);text-align:center;padding:40px 0;line-height:1.8}
 
 /* editor */
-.field{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--paper);font:inherit;padding:12px 14px}
-#edTitle{font-size:18px;font-weight:700;margin-bottom:10px}
-#edBody{min-height:52vh;font-size:17px;line-height:1.75;resize:vertical}
+.field{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--paper);font:inherit;padding:12px 14px}
+#edTitle{font-size:18px;font-weight:700;margin-bottom:8px}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+#edBody{min-height:48vh;font-size:17px;line-height:1.75;resize:vertical}
 .stats{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--mute);font-size:13px;padding:10px 2px}
 .stats b{color:var(--paper);font-weight:500}
-.hint{color:var(--mute);font-size:12.5px;line-height:1.7;margin:4px 2px 14px}
-.hint code{color:var(--cue);font-family:var(--f-num)}
-.row{display:flex;flex-wrap:wrap;gap:8px}
+.hint{color:var(--mute);font-size:12.5px;line-height:1.8;margin:4px 2px 14px}
+.hint code{color:var(--cue);font-family:var(--f-num);font-size:12px}
+.hint em{color:var(--amber);font-style:normal;font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .row .grow{flex:1}
+h2.sec{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.08em;margin:22px 2px 10px}
+
+/* takes */
+.take{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center;padding:10px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
+.take .th{width:64px;height:64px;border-radius:8px;background:#000;object-fit:cover}
+.take .ti{min-width:0}
+.take .ti b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.take .ti span{font-size:12px;color:var(--mute)}
 
 /* sheet */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;max-height:82%;overflow:auto;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
-.sheet h3{margin:0 0 14px;font-size:16px}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;max-height:86%;overflow:auto;-webkit-overflow-scrolling:touch;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet h3{margin:0 0 12px;font-size:16px;display:flex;align-items:center;gap:8px}
+.sheet h3 .x{margin-left:auto}
 .sheet .inner{max-width:640px;margin:0 auto}
-.set{display:grid;grid-template-columns:5.5em 1fr 3.6em;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
-.set:last-child{border-bottom:0}
+.sheet h4{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.1em;margin:16px 0 2px}
+.set{display:grid;grid-template-columns:5.5em 1fr 3.8em;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
 .set label{color:var(--mute);font-size:13px}
 .set output{text-align:right;font-size:13px}
 .set input[type=range]{width:100%;accent-color:var(--amber)}
 .seg{display:flex;gap:6px;flex-wrap:wrap;grid-column:2/4}
-.seg button{height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line);font-size:13px}
+.seg button{height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line);font-size:13px}
 .seg button[aria-pressed=true]{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:700}
-.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);padding:0}
-.sw[aria-pressed=true]{border-color:var(--amber);box-shadow:0 0 0 2px var(--ink) inset}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);padding:0!important}
+.sw[aria-pressed=true]{border-color:var(--amber)!important;box-shadow:0 0 0 2px var(--panel) inset}
+.outline{display:grid;gap:6px}
+.outline button{text-align:left;padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);display:grid;grid-template-columns:2.2em 1fr auto;gap:8px;align-items:baseline}
+.outline button.here{border-color:var(--amber)}
+.outline .n{color:var(--mute);font-size:12px}
+.outline .s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.outline .d{color:var(--mute);font-size:12px}
 
 /* ---------- prompter ---------- */
 #pv{position:fixed;inset:0;z-index:20;background:#000;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
-#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-#camShade{position:absolute;inset:0;background:#000;opacity:.5;pointer-events:none}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#cam.mirror{transform:scaleX(-1)}
+#camShade{position:absolute;inset:0;background:#000;pointer-events:none}
+#frame{position:absolute;pointer-events:none;border:1px solid rgba(255,255,255,.35);box-shadow:0 0 0 100vmax rgba(0,0,0,.5)}
+#frame.raw{border:0;box-shadow:none}
+#frame.grid{background:
+  linear-gradient(to right,transparent calc(33.33% - .5px),rgba(255,255,255,.28) calc(33.33% - .5px),rgba(255,255,255,.28) calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),rgba(255,255,255,.28) calc(66.66% - .5px),rgba(255,255,255,.28) calc(66.66% + .5px),transparent calc(66.66% + .5px)),
+  linear-gradient(to bottom,transparent calc(33.33% - .5px),rgba(255,255,255,.28) calc(33.33% - .5px),rgba(255,255,255,.28) calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),rgba(255,255,255,.28) calc(66.66% - .5px),rgba(255,255,255,.28) calc(66.66% + .5px),transparent calc(66.66% + .5px))}
 #stage{position:absolute;inset:0}
-#scroller{position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 9%,#000 78%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 9%,#000 78%,transparent 100%)}
-#text{will-change:transform;font-weight:700;word-break:break-all;white-space:pre-wrap}
-#text p{margin:0 0 .55em}
-#text .cue{color:var(--cue);font-weight:500;font-size:.62em;letter-spacing:.04em}
-#text .r{opacity:.32;transition:opacity .25s}
+#scroller{position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 9%,#000 80%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 9%,#000 80%,transparent 100%)}
+#pv.win #scroller{top:calc(env(safe-area-inset-top,0px) + 58px);left:max(10px,env(safe-area-inset-left,0px));right:max(10px,env(safe-area-inset-right,0px));bottom:auto;height:var(--winH,36%);border-radius:14px;background:rgba(0,0,0,.62);-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 14%,#000 82%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 14%,#000 82%,transparent 100%)}
+#text{will-change:transform;white-space:pre-wrap;word-break:normal;overflow-wrap:anywhere;line-break:strict}
+#pv.oncam #text{text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 1px #000}
+#text p{margin:0 0 .5em}
+#text .cue{color:var(--cue);font-weight:500;font-size:.6em;letter-spacing:.04em;font-family:var(--f-ui)}
+#text .em{color:var(--amber)}
+#text .ps{color:var(--cue);opacity:.85;font-weight:400;margin:0 .12em}
+#text .r{opacity:.3;transition:opacity .25s}
 #guide{position:absolute;left:0;right:0;height:0;pointer-events:none}
 #guide::before,#guide::after{content:"";position:absolute;top:-9px;border:9px solid transparent}
-#guide::before{left:calc(2px + env(safe-area-inset-left,0px));border-left-color:var(--amber)}
-#guide::after{right:calc(2px + env(safe-area-inset-right,0px));border-right-color:var(--amber)}
-#guide i{position:absolute;left:28px;right:28px;top:0;border-top:1px dashed rgba(242,179,61,.35)}
+#guide::before{left:2px;border-left-color:var(--amber)}
+#guide::after{right:2px;border-right-color:var(--amber)}
+#guide i{position:absolute;left:24px;right:24px;top:0;border-top:1px dashed rgba(242,179,61,.35)}
+#pv:not(.win) #guide::before{left:calc(2px + env(safe-area-inset-left,0px))}
+#pv:not(.win) #guide::after{right:calc(2px + env(safe-area-inset-right,0px))}
 
 .hud{position:absolute;left:0;right:0;display:flex;align-items:center;gap:8px;z-index:3;transition:opacity .3s}
 .hud.topbar{top:0;padding:calc(8px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px));background:linear-gradient(#000c,#0000)}
 .hud.bottombar{bottom:0;padding:10px max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));background:linear-gradient(#0000,#000d);justify-content:center;flex-wrap:wrap}
-#pv.dim .hud{opacity:.18}
+#pv.dim .hud{opacity:.16}
+#pv.dim .hud .keep{opacity:1}
 .hb{height:42px;min-width:42px;border-radius:21px;background:rgba(30,32,38,.85);border:1px solid rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;font-size:13px;color:var(--paper)}
 .hb[aria-pressed=true]{background:var(--amber);color:#1a1405;border-color:var(--amber)}
 .hb.play{width:58px;height:58px;border-radius:50%;background:var(--paper);color:#000;padding:0}
 .hb.play svg{width:24px;height:24px;fill:currentColor;stroke:none}
-.hb.rec{width:58px;height:58px;border-radius:50%;padding:0;background:rgba(30,32,38,.85)}
-.hb.rec span{width:24px;height:24px;border-radius:50%;background:var(--rec);transition:border-radius .2s,transform .2s}
-.hb.rec.on span{border-radius:5px;transform:scale(.8)}
+.hb.rec{width:58px;height:58px;border-radius:50%;padding:0;background:rgba(30,32,38,.85);border:3px solid rgba(255,255,255,.85)}
+.hb.rec span{width:26px;height:26px;border-radius:50%;background:var(--rec);transition:border-radius .2s,transform .2s}
+.hb.rec.on span{border-radius:5px;transform:scale(.75)}
 .speed{display:inline-flex;align-items:center;background:rgba(30,32,38,.85);border:1px solid rgba(255,255,255,.08);border-radius:21px;height:42px}
 .speed button{width:40px;height:42px;font-size:20px}
-.speed .num{min-width:5.2em;text-align:center;font-size:13px;line-height:1.15}
+.speed .num{min-width:5em;text-align:center;font-size:13px;line-height:1.15}
 .speed .num small{display:block;font-size:10px;color:var(--mute);font-family:var(--f-ui)}
-.clock{font-size:13px;color:var(--paper);flex:1;text-align:center}
+.clock{font-size:13px;color:var(--paper);flex:1;text-align:center;min-width:0}
 .clock .recdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rec);margin-right:6px;vertical-align:1px;animation:blink 1s steps(2) infinite}
+.clock small{display:block;font-size:10.5px;color:var(--mute)}
 @keyframes blink{50%{opacity:0}}
 #prog{position:absolute;left:0;top:0;height:2px;background:var(--amber);z-index:4;width:0}
-#count{position:absolute;inset:0;display:grid;place-items:center;font:900 30vmin/1 var(--f-num);color:var(--amber);z-index:5;pointer-events:none}
-#toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:#1e2026;border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;z-index:60;max-width:86%;text-align:center}
-#voiceTag{font-size:11px;color:var(--mute);max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;direction:rtl}
+#count{position:absolute;inset:0;display:grid;place-items:center;font:900 30vmin/1 var(--f-num);color:var(--amber);z-index:5;pointer-events:none;text-shadow:0 2px 20px #000}
+#toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:#1e2026;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;z-index:60;max-width:88%;text-align:center;line-height:1.6}
+#heard{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));font-size:12px;color:#cfd3da;background:rgba(0,0,0,.55);border-radius:12px;padding:3px 10px;max-width:80%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;z-index:3;pointer-events:none}
+#heard:empty{display:none}
+.mic{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-left:4px}
 
-#result video{width:100%;max-height:50vh;border-radius:10px;background:#000;display:block;margin-bottom:12px}
+#resVid{width:100%;max-height:52vh;border-radius:10px;background:#000;display:block;margin-bottom:12px}
+.metaRow{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--mute);margin:-4px 0 12px}
+.metaRow b{color:var(--paper);font-weight:500}
+textarea.srt{width:100%;height:120px;font:12px/1.5 var(--f-num);background:var(--panel2);color:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
 <!-- ============ Library ============ -->
 <section id="vLib" class="view">
   <div class="top">
-    <h1>提词器<small>口播稿 · 自动滚动 · 跟读 · 前置录制</small></h1>
-    <button class="btn icon ghost" id="libSet" aria-label="显示设置"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
-    <button class="btn primary" id="newBtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新稿子</button>
+    <h1>提词器<small>口播稿 · 跟读滚动 · 取景录制 · 自动字幕</small></h1>
+    <button class="btn icon ghost" id="libTakes" aria-label="我的录像"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg></button>
+    <button class="btn icon ghost" id="libSet" aria-label="设置"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn primary grow" id="newBtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新稿子</button>
+    <button class="btn" id="impBtn"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>导入 txt</button>
+    <input type="file" id="impFile" accept=".txt,.md,text/plain" multiple hidden>
   </div>
   <div class="list" id="list"></div>
 </section>
@@ -130,31 +176,42 @@ svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke
     <button class="btn primary" id="edGo"><svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="M7 5l12 7-12 7z"/></svg>开始提词</button>
   </div>
   <input id="edTitle" class="field" placeholder="标题" autocomplete="off">
+  <div class="tools">
+    <button class="btn sm" data-ins="cue">【提示】</button>
+    <button class="btn sm" data-ins="em">**重读**</button>
+    <button class="btn sm" data-ins="ps">/ 停顿</button>
+    <button class="btn sm" id="edClean">整理格式</button>
+  </div>
   <textarea id="edBody" class="field" placeholder="把口播稿粘贴到这里"></textarea>
   <div class="stats" id="edStats"></div>
-  <p class="hint">用 <code>【】</code> 括起来的是提示（比如 <code>【停顿】</code><code>【看镜头】</code>），提词时显示成小号蓝字，不算进字数，跟读也会跳过。空一行就是分段。</p>
+  <p class="hint"><code>【看镜头】</code> 小号蓝字提示，不念、不算字数。<code>**重点**</code> 显示成<em>黄色</em>，提醒自己重读。<code>/</code> 是换气停顿。空一行是分段，提词时可以按段跳转。</p>
   <div class="row">
     <button class="btn danger" id="edDel">删除这篇</button>
     <span class="grow"></span>
+    <button class="btn" id="edCopy">复制全文</button>
     <button class="btn" id="edDup">复制一份</button>
   </div>
+  <h2 class="sec" id="edTakesH" hidden>这篇的录像</h2>
+  <div class="list" id="edTakes"></div>
 </section>
 
 <!-- ============ Prompter ============ -->
 <div id="pv" hidden>
   <video id="cam" playsinline muted hidden></video>
   <div id="camShade" hidden></div>
+  <div id="frame" hidden></div>
   <div id="stage">
-    <div id="scroller"><div id="text"></div></div>
-    <div id="guide"><i></i></div>
+    <div id="scroller"><div id="text"></div><div id="guide"><i></i></div></div>
   </div>
   <div id="prog"></div>
   <div class="hud topbar">
     <button class="hb" id="pvClose" aria-label="退出提词"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    <div class="clock num" id="clock">0:00 / 0:00</div>
-    <span id="voiceTag"></span>
-    <button class="hb" id="pvSet" aria-label="显示设置"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+    <button class="hb" id="pvOutline" aria-label="段落跳转"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg></button>
+    <div class="clock num keep" id="clock">0:00</div>
+    <button class="hb" id="pvFlip" aria-label="切换前后摄像头" hidden><svg viewBox="0 0 24 24"><path d="M4 9h3l2-3h6l2 3h3v10H4z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.8M14.5 13.5a2.5 2.5 0 0 1-4.3 1.8M13.8 10v1.8H12M10.2 17v-1.8H12"/></svg></button>
+    <button class="hb" id="pvSet" aria-label="设置"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </div>
+  <div id="heard"></div>
   <div class="hud bottombar">
     <button class="hb" id="pvRestart" aria-label="回到开头"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg></button>
     <div class="speed">
@@ -162,42 +219,75 @@ svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke
       <div class="num" id="spVal">240<small>字/分钟</small></div>
       <button id="spUp" aria-label="加速">+</button>
     </div>
-    <button class="hb play" id="pvPlay" aria-label="开始滚动"><svg viewBox="0 0 24 24" id="playIco"><path d="M7 5l12 7-12 7z"/></svg></button>
+    <button class="hb play keep" id="pvPlay" aria-label="开始滚动"><svg viewBox="0 0 24 24" id="playIco"><path d="M7 5l12 7-12 7z"/></svg></button>
     <button class="hb" id="pvVoice" aria-pressed="false" aria-label="跟读模式"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>跟读</button>
-    <button class="hb" id="pvCam" aria-pressed="false" aria-label="前置摄像头"><svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
-    <button class="hb rec" id="pvRec" aria-label="录制" hidden><span></span></button>
+    <button class="hb" id="pvCam" aria-pressed="false" aria-label="摄像头"><svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <button class="hb rec keep" id="pvRec" aria-label="开始录制" hidden><span></span></button>
   </div>
   <div id="count" hidden></div>
 </div>
 
 <!-- ============ Settings sheet ============ -->
 <div class="scrim" id="scrim" hidden></div>
-<div class="sheet" id="sheet" hidden role="dialog" aria-label="显示设置">
+<div class="sheet" id="sheet" hidden role="dialog" aria-label="设置">
   <div class="inner">
-    <h3>显示设置</h3>
-    <div class="set"><label for="sFont">字号</label><input type="range" id="sFont" min="22" max="96" step="1"><output class="num" id="oFont"></output></div>
+    <h3>设置<button class="btn sm ghost x" data-close>完成</button></h3>
+    <h4>文字</h4>
+    <div class="set"><label for="sFont">字号</label><input type="range" id="sFont" min="22" max="110" step="1"><output class="num" id="oFont"></output></div>
     <div class="set"><label for="sLH">行距</label><input type="range" id="sLH" min="1.1" max="2.2" step="0.05"><output class="num" id="oLH"></output></div>
-    <div class="set"><label for="sMargin">左右留白</label><input type="range" id="sMargin" min="8" max="30" step="1"><output class="num" id="oMargin"></output></div>
-    <div class="set"><label for="sGuide">视线位置</label><input type="range" id="sGuide" min="12" max="60" step="1"><output class="num" id="oGuide"></output></div>
-    <div class="set"><label for="sCpm">语速</label><input type="range" id="sCpm" min="120" max="420" step="10"><output class="num" id="oCpm"></output></div>
-    <div class="set"><label>倒计时</label><div class="seg" id="sCount"></div></div>
+    <div class="set"><label for="sMargin">左右留白</label><input type="range" id="sMargin" min="2" max="30" step="1"><output class="num" id="oMargin"></output></div>
+    <div class="set"><label>字体</label><div class="seg" id="sFace"></div></div>
+    <div class="set"><label>粗细</label><div class="seg" id="sWeight"></div></div>
+    <div class="set"><label>颜色</label><div class="seg" id="sColor"></div></div>
     <div class="set"><label>对齐</label><div class="seg" id="sAlign"></div></div>
-    <div class="set"><label>镜像</label><div class="seg" id="sMirror"></div></div>
-    <div class="set"><label>文字颜色</label><div class="seg" id="sColor"></div></div>
+    <h4>滚动</h4>
+    <div class="set"><label for="sCpm">默认语速</label><input type="range" id="sCpm" min="120" max="420" step="10"><output class="num" id="oCpm"></output></div>
+    <div class="set"><label for="sGuide">视线位置</label><input type="range" id="sGuide" min="10" max="60" step="1"><output class="num" id="oGuide"></output></div>
+    <div class="set"><label>倒计时</label><div class="seg" id="sCount"></div></div>
+    <div class="set"><label>提示音</label><div class="seg" id="sBeep"></div></div>
     <div class="set"><label>已读变暗</label><div class="seg" id="sDim"></div></div>
+    <div class="set"><label>镜像</label><div class="seg" id="sMirror"></div></div>
+    <h4>拍摄</h4>
+    <div class="set"><label>提词窗口</label><div class="seg" id="sWin"></div></div>
+    <div class="set"><label for="sWinH">小窗高度</label><input type="range" id="sWinH" min="22" max="60" step="1"><output class="num" id="oWinH"></output></div>
+    <div class="set"><label>画幅</label><div class="seg" id="sAspect"></div></div>
+    <div class="set"><label>清晰度</label><div class="seg" id="sRes"></div></div>
+    <div class="set"><label>九宫格</label><div class="seg" id="sGrid"></div></div>
+    <div class="set"><label for="sShade">画面压暗</label><input type="range" id="sShade" min="0" max="80" step="5"><output class="num" id="oShade"></output></div>
+    <p class="hint" style="margin-top:12px">小窗模式把字放在屏幕顶部、紧挨前置镜头，眼神更像在看观众。画幅选 9:16 发抖音/小红书，16:9 发 B 站横屏。录出来的视频里没有字。</p>
   </div>
 </div>
 
-<!-- ============ Recording result ============ -->
-<div class="sheet" id="result" hidden role="dialog" aria-label="录制完成">
+<!-- ============ Outline sheet ============ -->
+<div class="sheet" id="outlineSheet" hidden role="dialog" aria-label="段落跳转">
   <div class="inner">
-    <h3>录好了 <span class="num" id="resMeta" style="color:var(--mute);font-weight:400;font-size:13px"></span></h3>
+    <h3>跳到哪一段<button class="btn sm ghost x" data-close>关闭</button></h3>
+    <div class="outline" id="outline"></div>
+  </div>
+</div>
+
+<!-- ============ Takes sheet ============ -->
+<div class="sheet" id="takesSheet" hidden role="dialog" aria-label="我的录像">
+  <div class="inner">
+    <h3>我的录像<button class="btn sm ghost x" data-close>关闭</button></h3>
+    <div class="list" id="takesAll"></div>
+    <p class="hint" style="margin-top:12px">录像保存在这台手机的浏览器里。清除 Safari 网站数据会把它们删掉，满意的记得存到相册。</p>
+  </div>
+</div>
+
+<!-- ============ Take player ============ -->
+<div class="sheet" id="result" hidden role="dialog" aria-label="录像">
+  <div class="inner">
+    <h3><span id="resTitle">录好了</span><button class="btn sm ghost x" data-close>关闭</button></h3>
     <video id="resVid" controls playsinline></video>
+    <div class="metaRow" id="resMeta"></div>
     <div class="row">
-      <button class="btn primary grow" id="resSave">保存到相册 / 分享</button>
-      <button class="btn" id="resDrop">不要了</button>
+      <button class="btn primary grow" id="resSave">存到相册 / 分享</button>
+      <button class="btn" id="resSrt">字幕 SRT</button>
+      <button class="btn danger" id="resDel">删除</button>
     </div>
     <p class="hint" id="resHint" style="margin-top:10px"></p>
+    <textarea class="srt" id="srtBox" readonly hidden></textarea>
   </div>
 </div>
 <div id="toast" hidden></div>
@@ -208,60 +298,115 @@ svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke
 const $ = id => document.getElementById(id);
 const KEY = "joyce-prompter-v1";
 
-/* ---------------- state ---------------- */
+/* ================= state ================= */
 const SAMPLE = {
-  id: "sample",
-  sample: true,
+  id: "sample", sample: true,
   title: "示例：AI Agent 到底是什么",
   body:
 `大家好，我是 Joyce。【看镜头】
 
-今天聊一个最近被说烂了的词：AI Agent。
+今天聊一个最近被说烂了的词：**AI Agent**。
 
-很多人以为 Agent 就是一个更聪明的聊天机器人。其实差别不在聪明，在于它能不能自己动手。
+很多人以为 Agent 就是一个更聪明的聊天机器人。/ 其实差别不在聪明，在于它能不能**自己动手**。
 
 你跟 ChatGPT 说“帮我订一张周五去上海的票”，它只能告诉你怎么订。【停顿】
 Agent 会自己打开网页，查班次，比价格，最后把订单号发给你。
 
 拆开看，Agent 就三样东西：一个大模型负责想，一组工具负责做，再加一个循环，让它做完一步看看结果，再决定下一步。
 
-想、做、看结果，再想。就这么转下去，直到任务完成。
+想、做、看结果，再想。/ 就这么转下去，直到任务完成。
 
-所以下次看到有人说“这是一个 Agent”，你可以问一句：它能调用什么工具？它怎么知道自己做完了？
+所以下次看到有人说“这是一个 Agent”，你可以问一句：**它能调用什么工具？它怎么知道自己做完了？**
 
 这两个问题答得上来，才算真的 Agent。【停顿】
 
 我是 Joyce，下期见。`,
   updated: Date.now()
 };
-const DEF = { cpm:240, font:46, lh:1.45, margin:16, guide:28, count:3, align:"left", mirror:"none", color:"#f1ede4", dim:true };
+const DEF = { cpm:240, font:46, lh:1.45, margin:6, guide:28, count:3, align:"left", mirror:"none", color:"#f1ede4",
+  dim:true, face:"sans", weight:700, beep:true, win:"full", winH:36, aspect:"raw", res:1080, grid:false, shade:45, facing:"user" };
 let S = { scripts:[SAMPLE], settings:{...DEF} };
 try { const raw = localStorage.getItem(KEY); if (raw) { const o = JSON.parse(raw); if (o && Array.isArray(o.scripts)) S = { scripts:o.scripts, settings:{...DEF, ...(o.settings||{})} }; } } catch(e) {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
 const cfg = S.settings;
+if (cfg.margin > 30) cfg.margin = DEF.margin;
 let curId = null;
 const cur = () => S.scripts.find(s => s.id === curId);
+const scriptCpm = () => (cur()?.cpm) || cfg.cpm;
 
-/* ---------------- text helpers ---------------- */
+/* ================= helpers ================= */
 const SPOKEN = /[\p{Script=Han}\p{L}\p{N}]/u;
-function stripCues(t){ return t.replace(/【[^】]*】/g, ""); }
-function countChars(t){ let n=0; for (const ch of stripCues(t)) if (SPOKEN.test(ch)) n++; return n; }
+const stripMarks = t => t.replace(/【[^】]*】/g, "").replace(/\*\*/g, "");
+function countChars(t){ let n=0; for (const ch of stripMarks(t)) if (SPOKEN.test(ch)) n++; return n; }
 function fmt(sec){ sec = Math.max(0, Math.round(sec)); return Math.floor(sec/60) + ":" + String(sec%60).padStart(2,"0"); }
-function toast(msg, ms=2200){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.h); toast.h=setTimeout(()=>t.hidden=true, ms); }
+function toast(msg, ms=2400){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.h); toast.h=setTimeout(()=>t.hidden=true, ms); }
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtDate = ts => { const d=new Date(ts); return `${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+async function copyText(t){ try { await navigator.clipboard.writeText(t); return true; } catch(e){ return false; } }
+async function shareFile(blob, name){
+  const file = new File([blob], name, { type: blob.type || "application/octet-stream" });
+  try { if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:name }); return "shared"; } }
+  catch(e){ if (e && e.name==="AbortError") return "cancel"; }
+  try { const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 30000); return "download"; } catch(e){ return "fail"; }
+}
 
-/* ---------------- library ---------------- */
+/* beeps (WebAudio, created on first user gesture) */
+let actx=null;
+function beep(freq=880, ms=90){
+  if (!cfg.beep) return;
+  try { actx ||= new (window.AudioContext||window.webkitAudioContext)(); if (actx.state==="suspended") actx.resume();
+    const o=actx.createOscillator(), g=actx.createGain(); o.frequency.value=freq; o.connect(g); g.connect(actx.destination);
+    const t=actx.currentTime; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+ms/1000); o.start(t); o.stop(t+ms/1000+0.02);
+  } catch(e){}
+}
+
+/* ================= takes store (IndexedDB) ================= */
+const idb = (() => {
+  let p = null;
+  const open = () => p ||= new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error("no idb"));
+    const r = indexedDB.open("joyce-prompter", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("takes", { keyPath:"id" });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const run = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("takes", mode); const req = fn(t.objectStore("takes")); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+  return { put: v => run("readwrite", s => s.put(v)), del: id => run("readwrite", s => s.delete(id)), all: () => run("readonly", s => s.getAll()) };
+})();
+let takesCache = [];
+async function loadTakes(){ try { takesCache = (await idb.all()) || []; } catch(e){ takesCache = []; } takesCache.sort((a,b)=>b.created-a.created); return takesCache; }
+function takeRow(tk){
+  const el = document.createElement("div"); el.className = "take";
+  const v = document.createElement("video"); v.className="th"; v.muted=true; v.playsInline=true; v.preload="metadata";
+  try { v.src = URL.createObjectURL(tk.blob) + "#t=0.5"; } catch(e){}
+  const s = S.scripts.find(x=>x.id===tk.scriptId);
+  const ti = document.createElement("div"); ti.className="ti";
+  ti.innerHTML = `<b>${esc(tk.title || s?.title || "口播")}</b><span class="num">${fmtDate(tk.created)} · ${fmt(tk.dur)} · ${(tk.size/1048576).toFixed(1)}MB${tk.aspect && tk.aspect!=="raw" ? " · "+tk.aspect : ""}</span>`;
+  const b = document.createElement("button"); b.className="btn sm"; b.textContent="打开";
+  b.onclick = () => openTake(tk);
+  el.append(v, ti, b); return el;
+}
+async function renderTakes(){
+  await loadTakes();
+  const all = $("takesAll"); all.textContent="";
+  if (!takesCache.length) all.innerHTML = '<p class="empty">还没有录像。<br>提词时点 📷 打开摄像头，再点红色按钮开始录。</p>';
+  takesCache.forEach(t => all.appendChild(takeRow(t)));
+  const mine = takesCache.filter(t => t.scriptId === curId), box = $("edTakes"); box.textContent="";
+  $("edTakesH").hidden = !mine.length; mine.forEach(t => box.appendChild(takeRow(t)));
+}
+
+/* ================= library ================= */
 function show(v){ ["vLib","vEd"].forEach(id => $(id).hidden = id!==v); }
 function renderList(){
   const L = $("list"); L.textContent = "";
-  if (!S.scripts.length){ L.innerHTML = '<p class="empty">还没有稿子。点右上角“新稿子”，把口播稿粘贴进去。</p>'; return; }
+  if (!S.scripts.length){ L.innerHTML = '<p class="empty">还没有稿子。<br>点“新稿子”把口播稿粘贴进去，或者导入 txt 文件。</p>'; return; }
   [...S.scripts].sort((a,b)=>b.updated-a.updated).forEach(s => {
-    const n = countChars(s.body);
+    const n = countChars(s.body), cpm = s.cpm || cfg.cpm;
     const card = document.createElement("div");
     card.className = "card"; card.setAttribute("role","button"); card.tabIndex = 0;
     const t = document.createElement("div"); t.className="t"; t.textContent = s.title || "未命名";
     if (s.sample){ const g=document.createElement("span"); g.className="tag"; g.textContent="示例"; t.appendChild(g); }
-    const p = document.createElement("div"); p.className="p"; p.textContent = stripCues(s.body).replace(/\s+/g," ").trim().slice(0,60) || "（空）";
-    const m = document.createElement("div"); m.className="m num"; m.textContent = `${n} 字 · 约 ${fmt(n/cfg.cpm*60)}`;
+    const p = document.createElement("div"); p.className="p"; p.textContent = stripMarks(s.body).replace(/\s+/g," ").trim().slice(0,60) || "（空）";
+    const m = document.createElement("div"); m.className="m num"; m.textContent = `${n} 字 · ${cpm} 字/分 · 约 ${fmt(n/cpm*60)}`;
     const go = document.createElement("button"); go.className="go"; go.setAttribute("aria-label","开始提词：" + (s.title||"未命名"));
     go.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>';
     go.onclick = e => { e.stopPropagation(); curId = s.id; openPrompter(); };
@@ -270,22 +415,30 @@ function renderList(){
     card.append(t, go, p, m); L.appendChild(card);
   });
 }
+const newId = () => "s" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
 $("newBtn").onclick = () => {
-  const s = { id: "s" + Date.now().toString(36), title:"", body:"", updated:Date.now() };
+  const s = { id:newId(), title:"", body:"", updated:Date.now() };
   S.scripts.push(s); save(); openEditor(s.id); setTimeout(()=>$("edBody").focus(), 50);
 };
+$("impBtn").onclick = () => $("impFile").click();
+$("impFile").onchange = async e => {
+  const files = [...e.target.files]; let n = 0;
+  for (const f of files){ try { const txt = await f.text(); S.scripts.push({ id:newId(), title:f.name.replace(/\.(txt|md)$/i,""), body:txt.replace(/\r\n?/g,"\n"), updated:Date.now() }); n++; } catch(err){} }
+  save(); renderList(); e.target.value = ""; toast(n ? `导入了 ${n} 篇` : "没有读到文件内容");
+};
+$("libTakes").onclick = async () => { await renderTakes(); openSheet("takesSheet"); };
 
-/* ---------------- editor ---------------- */
+/* ================= editor ================= */
 let delArmed = false;
 function openEditor(id){
   curId = id; const s = cur(); if (!s) return;
   $("edTitle").value = s.title; $("edBody").value = s.body;
   delArmed = false; $("edDel").textContent = "删除这篇";
-  edStats(); show("vEd"); window.scrollTo(0,0);
+  edStats(); show("vEd"); window.scrollTo(0,0); renderTakes();
 }
 function edStats(){
-  const b = $("edBody").value, n = countChars(b), paras = b.split(/\n\s*\n/).filter(x=>x.trim()).length;
-  $("edStats").innerHTML = `<span><b class="num">${n}</b> 字</span><span>按 <b class="num">${cfg.cpm}</b> 字/分钟，约 <b class="num">${fmt(n/cfg.cpm*60)}</b></span><span><b class="num">${paras}</b> 段</span>`;
+  const b = $("edBody").value, n = countChars(b), paras = b.split(/\n\s*\n/).filter(x=>x.trim()).length, cpm = scriptCpm();
+  $("edStats").innerHTML = `<span><b class="num">${n}</b> 字</span><span><b class="num">${paras}</b> 段</span><span>按 <b class="num">${cpm}</b> 字/分钟，约 <b class="num">${fmt(n/cpm*60)}</b></span>`;
 }
 function edSave(){
   const s = cur(); if (!s) return;
@@ -294,74 +447,123 @@ function edSave(){
 }
 $("edTitle").oninput = edSave;
 $("edBody").oninput = () => { edSave(); edStats(); };
+document.querySelectorAll("[data-ins]").forEach(b => b.onclick = () => {
+  const ta = $("edBody"), a = ta.selectionStart, z = ta.selectionEnd, sel = ta.value.slice(a, z), k = b.dataset.ins;
+  let ins, caret;
+  if (k==="cue"){ ins = "【" + (sel || "停顿") + "】"; caret = a + ins.length; }
+  else if (k==="em"){ ins = "**" + (sel || "重点") + "**"; caret = sel ? a + ins.length : a + 2; }
+  else { ins = " / "; caret = a + ins.length; }
+  ta.setRangeText(ins, a, z, "end"); ta.focus(); ta.setSelectionRange(sel||k!=="em" ? caret : a+2, sel||k!=="em" ? caret : a+4);
+  edSave(); edStats();
+});
+$("edClean").onclick = () => {
+  // Normalize pasted scripts: unify line breaks, drop trailing spaces, collapse 3+ blank lines, full-width spacing around CJK punctuation.
+  const ta = $("edBody");
+  ta.value = ta.value.replace(/\r\n?/g,"\n").replace(/[ \t　]+$/gm,"").replace(/^[ \t　]+/gm,"").replace(/\n{3,}/g,"\n\n").trim();
+  edSave(); edStats(); toast("已整理：去掉多余空格和空行");
+};
 $("edBack").onclick = () => { edSave(); const s=cur(); if (s && !s.title.trim() && !s.body.trim()){ S.scripts=S.scripts.filter(x=>x!==s); save(); } renderList(); show("vLib"); };
 $("edGo").onclick = () => { edSave(); if (!countChars(cur().body)) { toast("稿子是空的，先粘贴内容"); return; } openPrompter(); };
-$("edDup").onclick = () => { edSave(); const s=cur(); const c={...s, id:"s"+Date.now().toString(36), title:(s.title||"未命名")+" 副本", updated:Date.now()}; delete c.sample; S.scripts.push(c); save(); openEditor(c.id); toast("已复制"); };
+$("edCopy").onclick = async () => { const ok = await copyText($("edBody").value); if (ok) toast("全文已复制"); else { $("edBody").select(); toast("已选中全文，长按复制"); } };
+$("edDup").onclick = () => { edSave(); const s=cur(); const c={...s, id:newId(), title:(s.title||"未命名")+" 副本", updated:Date.now()}; delete c.sample; S.scripts.push(c); save(); openEditor(c.id); toast("已复制一份"); };
 $("edDel").onclick = () => {
   if (!delArmed){ delArmed = true; $("edDel").textContent = "再点一次确认删除"; setTimeout(()=>{ delArmed=false; $("edDel").textContent="删除这篇"; }, 3000); return; }
   S.scripts = S.scripts.filter(x => x.id !== curId); save(); renderList(); show("vLib"); toast("已删除");
 };
 
-/* ---------------- prompter ---------------- */
+/* ================= prompter: text model ================= */
 const pv=$("pv"), textEl=$("text"), scroller=$("scroller");
 let offset=0, playing=false, last=0, raf=0, spans=[], norm="", totalChars=0, readIdx=0;
-let elapsed=0, counting=false, wakeLock=null;
+let paras=[], units=[];     // paras: {idx,label}; units: subtitle chunks {a,b,text}
+let elapsed=0, counting=false, wakeLock=null, runStartIdx=0;
 
 function buildText(body){
-  textEl.textContent = ""; spans = []; let ns = [];
-  const paras = body.replace(/\r/g,"").split(/\n/);
-  for (const line of paras){
+  textEl.textContent = ""; spans = []; paras = []; units = [];
+  const ns = [];
+  let u = { a:0, text:"" };
+  const flushUnit = () => { const t = u.text.replace(/[，。、；：！？,.;:!?\s“”"「」…—]+$/,"").replace(/^[\s“”"「」]+/,"").trim(); if (t && spans.length > u.a) units.push({ a:u.a, b:spans.length, text:t }); u = { a:spans.length, text:"" }; };
+  const lines = body.replace(/\r/g,"").split("\n");
+  let newPara = true;
+  for (const line of lines){
     const p = document.createElement("p");
-    if (!line.trim()){ p.style.height=".2em"; textEl.appendChild(p); continue; }
-    const parts = line.split(/(【[^】]*】)/);
+    if (!line.trim()){ p.style.height=".15em"; textEl.appendChild(p); newPara = true; flushUnit(); continue; }
+    if (newPara){ paras.push({ idx:spans.length, label:stripMarks(line).replace(/\s*\/\s*/g,"").trim().slice(0,40) }); newPara = false; }
+    const parts = line.split(/(【[^】]*】|\*\*[^*]+\*\*)/);
     for (const part of parts){
       if (!part) continue;
-      if (part.startsWith("【")){ const c=document.createElement("span"); c.className="cue"; c.textContent=part.slice(1,-1); p.appendChild(c); continue; }
-      for (const ch of part){
+      if (part.startsWith("【") && part.endsWith("】")){ const c=document.createElement("span"); c.className="cue"; c.textContent=part.slice(1,-1); p.appendChild(c); continue; }
+      const isEm = part.startsWith("**") && part.endsWith("**") && part.length > 4;
+      const host = isEm ? Object.assign(document.createElement("span"), { className:"em" }) : p;
+      for (const ch of (isEm ? part.slice(2,-2) : part)){
+        if (ch === "/"){ const ps=document.createElement("span"); ps.className="ps"; ps.textContent="／"; host.appendChild(ps); continue; }
         const sp = document.createElement("span"); sp.textContent = ch;
-        if (SPOKEN.test(ch)){ spans.push(sp); ns.push(ch.toLowerCase()); }
-        p.appendChild(sp);
+        if (SPOKEN.test(ch)){ spans.push(sp); ns.push(ch.toLowerCase()); u.text += ch; }
+        else { if (u.text) u.text += ch; }
+        host.appendChild(sp);
+        // subtitle chunking: break at sentence/clause punctuation, or when a chunk gets long
+        const len = spans.length - u.a;
+        if (/[。！？!?；;…]/.test(ch) || (/[，,、：:]/.test(ch) && len >= 6) || len >= 18) flushUnit();
       }
+      if (isEm) p.appendChild(host);
     }
     textEl.appendChild(p);
+    flushUnit();
   }
+  flushUnit();
   norm = ns.join(""); totalChars = spans.length;
 }
+
+/* ================= prompter: layout ================= */
+const viewH = () => scroller.clientHeight;
+function padTop(){ return parseFloat(textEl.style.paddingTop) || 0; }
 function applyLayout(){
-  const H = pv.clientHeight;
-  textEl.style.fontSize = cfg.font + "px";
+  pv.classList.toggle("win", cfg.win==="top" && !!stream);
+  pv.style.setProperty("--winH", cfg.winH + "%");
+  const H = viewH(), W = scroller.clientWidth;
+  const fs = cfg.win==="top" && stream ? Math.min(cfg.font, 40) : cfg.font;
+  textEl.style.fontSize = fs + "px";
   textEl.style.lineHeight = cfg.lh;
   textEl.style.color = cfg.color;
   textEl.style.textAlign = cfg.align;
-  const side = cfg.margin/100*pv.clientWidth;
-  textEl.style.padding = `${H*cfg.guide/100 - cfg.font*cfg.lh*0.5}px calc(${side}px + env(safe-area-inset-right,0px)) ${H*(1-cfg.guide/100)}px calc(${side}px + env(safe-area-inset-left,0px))`;
-  $("guide").style.top = (H*cfg.guide/100) + "px";
+  textEl.style.fontFamily = cfg.face==="serif" ? "var(--f-serif)" : "var(--f-ui)";
+  textEl.style.fontWeight = cfg.face==="serif" ? (cfg.weight>=900 ? 900 : 600) : cfg.weight;
+  const side = Math.max(14, cfg.margin/100*W);
+  const g = (pv.classList.contains("win") ? Math.min(cfg.guide, 30) : cfg.guide)/100;
+  textEl.style.paddingTop = Math.max(0, H*g - fs*cfg.lh*0.5) + "px";
+  textEl.style.paddingBottom = H*(1-g) + "px";
+  textEl.style.paddingLeft = side + "px"; textEl.style.paddingRight = side + "px";
+  $("guide").style.top = (H*g) + "px";
   const sx = cfg.mirror==="h"||cfg.mirror==="hv" ? -1 : 1, sy = cfg.mirror==="v"||cfg.mirror==="hv" ? -1 : 1;
   $("stage").style.transform = `scale(${sx},${sy})`;
-  $("spVal").firstChild.nodeValue = cfg.cpm;
-  clampOffset(); paint();
+  $("spVal").firstChild.nodeValue = scriptCpm();
+  $("camShade").style.opacity = pv.classList.contains("win") ? cfg.shade/300 : cfg.shade/100;
+  layoutFrame();
+  clampOffset(); lastMarkOff = -1; paint();
 }
-// Height of readable text (between top padding and bottom padding)
-function contentH(){ const cs = getComputedStyle(textEl); return textEl.scrollHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom); }
-function maxOff(){ return Math.max(0, contentH()); }
-function pxPerSec(){ const secs = totalChars / (cfg.cpm/60); return secs>0 ? contentH()/secs : 0; }
+function contentH(){ return Math.max(0, textEl.scrollHeight - padTop() - (parseFloat(textEl.style.paddingBottom)||0)); }
+const maxOff = () => contentH();
+function pxPerSec(){ const secs = totalChars / (scriptCpm()/60); return secs>0 ? contentH()/secs : 0; }
 function clampOffset(){ offset = Math.min(Math.max(0, offset), maxOff()); }
+// index of first spoken char at (or just below) the guide line for a given offset
+function idxAtOffset(o = offset){
+  const top = padTop() + o - parseFloat(textEl.style.fontSize)*cfg.lh*0.3;
+  let lo=0, hi=spans.length; while (lo<hi){ const m=(lo+hi)>>1; if (spans[m].offsetTop < top) lo=m+1; else hi=m; } return lo;
+}
+function targetForIdx(i){
+  const sp = spans[Math.min(i, spans.length-1)]; if (!sp) return 0;
+  return Math.min(maxOff(), Math.max(0, sp.offsetTop - padTop()));
+}
+let lastMarkOff = -1;
 function paint(){
   textEl.style.transform = `translate3d(0,${-offset}px,0)`;
   const mo = maxOff(); $("prog").style.width = (mo? offset/mo*100 : 0) + "%";
-  const total = totalChars/cfg.cpm*60;
-  $("clock").innerHTML = (recorder ? '<span class="recdot"></span>' : "") + `${fmt(elapsed)} / ${fmt(total)}`;
-  if (cfg.dim && !voiceOn) markReadByLine();
-}
-// In auto-scroll mode, dim lines that have passed the guide line.
-let lastMarkOff = -1;
-function markReadByLine(){
-  if (Math.abs(offset - lastMarkOff) < 8) return; lastMarkOff = offset;
-  const cs = getComputedStyle(textEl), lineTop = parseFloat(cs.paddingTop) + offset - cfg.font*0.2;
-  // binary search first span whose top >= lineTop
-  let lo=0, hi=spans.length;
-  while (lo<hi){ const m=(lo+hi)>>1; if (spans[m].offsetTop < lineTop) lo=m+1; else hi=m; }
-  setRead(lo);
+  const total = totalChars/scriptCpm()*60;
+  const recT = recorder ? (performance.now()-recT0)/1000 : 0;
+  const remain = voiceOn ? (totalChars - voiceIdx)/scriptCpm()*60 : (mo ? (1 - offset/mo)*total : 0);
+  $("clock").innerHTML = recorder
+    ? `<span class="recdot"></span>${fmt(recT)}<small>剩约 ${fmt(remain)}</small>`
+    : `${fmt(elapsed)} / ${fmt(total)}<small>${voiceOn ? (srOn ? "跟读中 <span class=mic></span>" : "跟读") : "自动滚动"}${measuredCpm() ? " · 实测 "+measuredCpm()+" 字/分" : ""}</small>`;
+  if (cfg.dim && !voiceOn && Math.abs(offset - lastMarkOff) >= 6){ lastMarkOff = offset; setRead(idxAtOffset()); }
 }
 function setRead(n){
   n = Math.max(0, Math.min(n, spans.length));
@@ -370,17 +572,30 @@ function setRead(n){
   else for (let i=n;i<readIdx;i++) spans[i].classList.remove("r");
   readIdx = n;
 }
+function measuredCpm(){
+  if (elapsed < 8) return 0;
+  const done = (voiceOn ? voiceIdx : idxAtOffset()) - runStartIdx;
+  return done > 20 ? Math.round(done / (elapsed/60)) : 0;
+}
+
+/* ================= prompter: loop ================= */
 function loop(t){
   const dt = last ? Math.min(0.1,(t-last)/1000) : 0; last = t;
   if (playing && !voiceOn){
     offset += pxPerSec()*dt; elapsed += dt;
-    if (offset >= maxOff()){ offset = maxOff(); setPlaying(false); toast("读完了"); }
+    if (offset >= maxOff()){ offset = maxOff(); finishRun(); }
   } else if (voiceOn){
     if (playing) elapsed += dt;
-    const d = voiceTarget - offset; if (Math.abs(d) > 0.5) offset += d*Math.min(1, dt*5);
+    const d = voiceTarget - offset; if (Math.abs(d) > 0.5) offset += d*Math.min(1, dt*4.5);
   }
-  if (recorder && !playing) elapsed += 0; // recording time shown separately via elapsed when playing
+  if (recorder) sampleTimeline();
   paint(); raf = requestAnimationFrame(loop);
+}
+function finishRun(){
+  const m = measuredCpm();
+  setPlaying(false); stopVoice();
+  if (recorder){ recorder.stop(); return; }
+  toast(`读完了 · 用时 ${fmt(elapsed)}${m ? ` · 实测 ${m} 字/分钟` : ""}`, 3500); beep(660, 160);
 }
 function setPlaying(on){
   playing = on;
@@ -390,220 +605,352 @@ function setPlaying(on){
 }
 function startWithCount(after){
   if (counting) return;
-  if (!cfg.count){ after(); return; }
-  counting = true; let n = cfg.count; const c = $("count"); c.hidden=false; c.textContent=n;
-  const tick = setInterval(() => { n--; if (n<=0){ clearInterval(tick); c.hidden=true; counting=false; after(); } else c.textContent=n; }, 1000);
+  if (!cfg.count){ beep(1175,120); after(); return; }
+  counting = true; let n = cfg.count; const c = $("count"); c.hidden=false; c.textContent=n; beep(880);
+  const tick = setInterval(() => { n--; if (n<=0){ clearInterval(tick); c.hidden=true; counting=false; beep(1175,160); after(); } else { c.textContent=n; beep(880); } }, 1000);
 }
+function rewindIfEnd(){ if (offset >= maxOff()-1){ offset = 0; voiceTarget = 0; voiceIdx = 0; setRead(0); lastMarkOff=-1; } }
 function togglePlay(){
   if (counting) return;
-  if (playing){ setPlaying(false); if (voiceOn) stopVoice(); return; }
-  if (offset >= maxOff()-1){ offset = 0; elapsed = 0; setRead(0); voiceIdx=0; }
-  startWithCount(() => { setPlaying(true); if (voiceOn) startVoice(); });
+  if (playing){ setPlaying(false); stopVoice(); return; }
+  rewindIfEnd();
+  startWithCount(() => { if (elapsed === 0) runStartIdx = voiceOn ? voiceIdx : idxAtOffset(); setPlaying(true); if (voiceOn) startVoice(); });
 }
 async function openPrompter(){
   const s = cur(); if (!s) return;
   buildText(s.body); pv.hidden = false;
-  offset = 0; elapsed = 0; readIdx = 0; voiceIdx = 0; voiceTarget = 0; lastMarkOff = -1;
+  offset = 0; elapsed = 0; readIdx = 0; voiceIdx = 0; voiceTarget = 0; lastMarkOff = -1; runStartIdx = 0;
   setPlaying(false); applyLayout();
+  if (document.fonts?.ready) document.fonts.ready.then(() => { if (!pv.hidden) applyLayout(); });
   try { if (document.documentElement.requestFullscreen && matchMedia("(pointer:fine)").matches) await document.documentElement.requestFullscreen(); } catch(e) {}
   try { wakeLock = await navigator.wakeLock?.request("screen"); } catch(e) { wakeLock = null; }
   last = 0; cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
 function closePrompter(){
-  if (recorder){ toast("先停止录制"); return; }
+  if (recorder){ toast("先点红色按钮停止录制"); return; }
   setPlaying(false); stopVoice(); voiceOn=false; $("pvVoice").setAttribute("aria-pressed","false");
   stopCam(); cancelAnimationFrame(raf); pv.hidden = true;
   try { wakeLock?.release(); } catch(e) {} wakeLock = null;
   try { if (document.fullscreenElement) document.exitFullscreen(); } catch(e) {}
-  renderList();
+  renderList(); if (!$("vEd").hidden) { edStats(); renderTakes(); }
 }
-document.addEventListener("visibilitychange", async () => { if (!pv.hidden && document.visibilityState==="visible"){ try { wakeLock = await navigator.wakeLock?.request("screen"); } catch(e){} } });
-window.addEventListener("resize", () => { if (!pv.hidden) applyLayout(); });
+document.addEventListener("visibilitychange", async () => {
+  if (pv.hidden) return;
+  if (document.visibilityState==="visible"){ try { wakeLock = await navigator.wakeLock?.request("screen"); } catch(e){} }
+  else if (playing && !recorder) setPlaying(false);
+});
+let rz=0; window.addEventListener("resize", () => { if (pv.hidden) return; cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { const i = voiceOn ? voiceIdx : idxAtOffset(); applyLayout(); offset = targetForIdx(i); voiceTarget = offset; }); });
 
 $("pvPlay").onclick = togglePlay;
 $("pvClose").onclick = closePrompter;
-$("pvRestart").onclick = () => { offset=0; elapsed=0; setRead(0); voiceIdx=0; voiceTarget=0; lastMarkOff=-1; paint(); };
-function bumpSpeed(d){ cfg.cpm = Math.min(420, Math.max(120, cfg.cpm + d)); save(); $("spVal").firstChild.nodeValue = cfg.cpm; syncSheet(); }
+$("pvRestart").onclick = () => { offset=0; elapsed=0; setRead(0); voiceIdx=0; voiceTarget=0; lastMarkOff=-1; runStartIdx=0; paint(); };
+function bumpSpeed(d){
+  const s = cur(); const v = Math.min(420, Math.max(120, scriptCpm() + d));
+  if (s){ s.cpm = v; } save(); $("spVal").firstChild.nodeValue = v;
+}
 $("spDown").onclick = () => bumpSpeed(-10);
 $("spUp").onclick = () => bumpSpeed(10);
 
 /* touch: drag to scroll, tap to play/pause */
 let tStart=null;
-scroller.addEventListener("pointerdown", e => { tStart = { y:e.clientY, off:offset, moved:false, t:Date.now() }; scroller.setPointerCapture(e.pointerId); });
+scroller.addEventListener("pointerdown", e => { tStart = { y:e.clientY, off:offset, moved:false }; try { scroller.setPointerCapture(e.pointerId); } catch(err){} });
 scroller.addEventListener("pointermove", e => {
   if (!tStart) return; const dy = e.clientY - tStart.y;
-  if (Math.abs(dy) > 6) tStart.moved = true;
+  if (Math.abs(dy) > 7) tStart.moved = true;
   if (tStart.moved){
     const flipY = cfg.mirror==="v"||cfg.mirror==="hv" ? -1 : 1;
     offset = tStart.off - dy*flipY; clampOffset();
-    if (voiceOn){ voiceTarget = offset; voiceIdx = idxAtOffset(); }
-    lastMarkOff = -1;
+    if (voiceOn){ voiceTarget = offset; voiceIdx = idxAtOffset(); setRead(voiceIdx); }
   }
 });
 scroller.addEventListener("pointerup", () => { if (tStart && !tStart.moved) togglePlay(); tStart = null; });
 scroller.addEventListener("pointercancel", () => tStart = null);
-scroller.addEventListener("wheel", e => { offset += e.deltaY; clampOffset(); lastMarkOff=-1; if (voiceOn){ voiceTarget=offset; voiceIdx=idxAtOffset(); } }, { passive:true });
+scroller.addEventListener("wheel", e => { offset += e.deltaY; clampOffset(); if (voiceOn){ voiceTarget=offset; voiceIdx=idxAtOffset(); } }, { passive:true });
 
-/* keyboard + bluetooth remotes (most send arrows / space / page keys) */
+/* keyboard + bluetooth remotes / page turners */
 document.addEventListener("keydown", e => {
-  if (pv.hidden) return;
-  const k = e.key;
+  if (pv.hidden || e.target.closest?.("input,textarea")) return;
+  const k = e.key, step = parseFloat(textEl.style.fontSize)*cfg.lh*3;
   if (k===" "||k==="Enter"){ e.preventDefault(); togglePlay(); }
   else if (k==="ArrowUp"){ e.preventDefault(); bumpSpeed(10); }
   else if (k==="ArrowDown"){ e.preventDefault(); bumpSpeed(-10); }
-  else if (k==="PageDown"||k==="ArrowRight"){ e.preventDefault(); offset += cfg.font*cfg.lh*3; clampOffset(); }
-  else if (k==="PageUp"||k==="ArrowLeft"){ e.preventDefault(); offset -= cfg.font*cfg.lh*3; clampOffset(); }
+  else if (k==="PageDown"||k==="ArrowRight"){ e.preventDefault(); offset += step; clampOffset(); if (voiceOn){ voiceTarget=offset; voiceIdx=idxAtOffset(); } }
+  else if (k==="PageUp"||k==="ArrowLeft"){ e.preventDefault(); offset -= step; clampOffset(); if (voiceOn){ voiceTarget=offset; voiceIdx=idxAtOffset(); } }
+  else if (k==="r"||k==="R"){ if (stream) $("pvRec").click(); }
   else if (k==="Escape"){ closePrompter(); }
 });
 
-/* ---------------- voice follow (speech recognition) ---------------- */
+/* outline jump */
+$("pvOutline").onclick = () => {
+  const box = $("outline"); box.textContent = "";
+  const here = voiceOn ? voiceIdx : idxAtOffset();
+  let hereI = 0; paras.forEach((p,i) => { if (p.idx <= here) hereI = i; });
+  paras.forEach((p, i) => {
+    const next = paras[i+1]?.idx ?? totalChars, chars = next - p.idx;
+    const b = document.createElement("button"); if (i===hereI) b.className = "here";
+    b.innerHTML = `<span class="n num">${i+1}</span><span class="s">${esc(p.label || "（提示）")}</span><span class="d num">${fmt(chars/scriptCpm()*60)}</span>`;
+    b.onclick = () => { offset = targetForIdx(p.idx); voiceIdx = p.idx; voiceTarget = offset; setRead(p.idx); lastMarkOff=-1; closeSheets(); };
+    box.appendChild(b);
+  });
+  openSheet("outlineSheet");
+};
+
+/* ================= voice follow ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let voiceOn=false, rec=null, voiceIdx=0, voiceTarget=0, srWanted=false;
+let voiceOn=false, rec=null, voiceIdx=0, voiceTarget=0, srWanted=false, srOn=false, srFails=0, lastHeardAt=0;
 if (!SR) $("pvVoice").hidden = true;
-function idxAtOffset(){
-  const top = parseFloat(getComputedStyle(textEl).paddingTop) + offset;
-  let lo=0, hi=spans.length; while (lo<hi){ const m=(lo+hi)>>1; if (spans[m].offsetTop < top - 2) lo=m+1; else hi=m; } return lo;
-}
-function targetForIdx(i){
-  const sp = spans[Math.min(i, spans.length-1)]; if (!sp) return 0;
-  const pad = parseFloat(getComputedStyle(textEl).paddingTop);
-  return Math.min(maxOff(), Math.max(0, sp.offsetTop - pad));
-}
 function normalize(s){ let o=""; for (const ch of s) if (SPOKEN.test(ch)) o += ch.toLowerCase(); return o; }
-// Find where the speaker is: match the tail of what was heard against the script near the current position.
+// Locate the speaker: match the tail of what was heard against the script just around the current position.
+// Longer matches win; short matches are only trusted close to the cursor; jumping backwards needs a solid match (a re-take).
+let lastHeardNorm = "";
 function follow(heard){
-  const h = normalize(heard); if (!h) return;
-  const from = Math.max(0, voiceIdx - 12), to = Math.min(norm.length, voiceIdx + 160);
+  const h = normalize(heard); if (!h || h === lastHeardNorm) return; lastHeardNorm = h;
+  const from = Math.max(0, voiceIdx - 30), to = Math.min(norm.length, voiceIdx + 100);
   const win = norm.slice(from, to);
-  for (let n = Math.min(10, h.length); n >= 2; n--){
-    const g = h.slice(-n);
-    let p = win.indexOf(g);
-    if (p < 0) continue;
-    // prefer the occurrence closest after the current position
-    let best = p; while (p >= 0){ if (from+p >= voiceIdx - 2){ best = p; break; } p = win.indexOf(g, p+1); }
-    const at = from + best + n;
-    if (n === 2 && at - voiceIdx > 14) continue;     // a 2-char match far ahead is likely noise
-    if (at < voiceIdx && n < 5) continue;            // only jump back on a solid match (re-take)
-    voiceIdx = at; break;
+  // try the tail of what was heard; if the last few characters were misheard, back off up to 3 characters
+  outer: for (let skip = 0; skip <= 3; skip++)
+  for (let n = Math.min(8, h.length - skip); n >= (skip ? 3 : 2); n--){
+    const g = h.slice(h.length - skip - n, h.length - skip);
+    let p = win.indexOf(g), best = -1, bestD = Infinity;
+    while (p >= 0){ const at = from + p + n, d = at >= voiceIdx ? at - voiceIdx : (voiceIdx - at) * 3; if (d < bestD){ bestD = d; best = at; } p = win.indexOf(g, p+1); }
+    if (best < 0) continue;
+    if (n < 3 && (best - n - voiceIdx > 2 || best < voiceIdx)) continue;   // 的/是/了: only trust right at the cursor
+    if (n < 5 && best - voiceIdx > 50) continue;
+    if (best < voiceIdx && n < 6) continue;                                  // going back needs a solid match (a re-take)
+    voiceIdx = best; break outer;
   }
   setRead(voiceIdx);
   voiceTarget = targetForIdx(voiceIdx);
-  if (voiceIdx >= norm.length - 1){ setPlaying(false); stopVoice(); toast("读完了"); }
+  if (voiceIdx >= norm.length - 1) finishRun();
 }
 function startVoice(){
   if (!SR) return; srWanted = true;
   if (rec) return;
-  rec = new SR(); rec.lang = "zh-CN"; rec.continuous = true; rec.interimResults = true;
+  rec = new SR(); rec.lang = "zh-CN"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  rec.onstart = () => { srOn = true; srFails = 0; };
   rec.onresult = e => {
     let txt = ""; for (let i=e.resultIndex;i<e.results.length;i++) txt += e.results[i][0].transcript;
-    $("voiceTag").textContent = txt.slice(-14);
+    $("heard").textContent = txt.slice(-16); lastHeardAt = performance.now();
     follow(txt);
   };
   rec.onerror = e => {
-    if (e.error==="not-allowed"||e.error==="service-not-allowed"){ srWanted=false; voiceOn=false; $("pvVoice").setAttribute("aria-pressed","false"); toast("麦克风没打开，跟读用不了。可以改用自动滚动。", 3500); }
+    if (e.error==="not-allowed"||e.error==="service-not-allowed"){ srWanted=false; voiceOn=false; $("pvVoice").setAttribute("aria-pressed","false"); toast("麦克风或语音识别没有授权。iPhone 需要在 设置→通用→键盘 里打开“启用听写”。", 4500); }
+    else if (e.error==="audio-capture"||e.error==="language-not-supported"){ srWanted=false; toast("语音识别用不了（"+e.error+"），先用自动滚动", 3500); }
+    else if (e.error==="network"){ srFails++; if (srFails>2){ srWanted=false; toast("语音识别连不上网络，先用自动滚动", 3500); } }
   };
-  rec.onend = () => { rec = null; if (srWanted && voiceOn && playing) setTimeout(startVoice, 150); };
+  rec.onend = () => { rec = null; srOn = false; lastHeardNorm = ""; if (srWanted && voiceOn && playing) setTimeout(startVoice, 250); };
   try { rec.start(); } catch(e) { rec = null; }
 }
-function stopVoice(){ srWanted = false; try { rec?.stop(); } catch(e){} rec = null; $("voiceTag").textContent = ""; }
+function stopVoice(){ srWanted = false; srOn = false; try { rec?.stop(); } catch(e){} rec = null; $("heard").textContent = ""; }
 $("pvVoice").onclick = () => {
   voiceOn = !voiceOn; $("pvVoice").setAttribute("aria-pressed", String(voiceOn));
-  if (voiceOn){ voiceIdx = idxAtOffset(); voiceTarget = offset; toast("跟读：你念到哪，字就滚到哪。点播放开始。"); if (playing) startVoice(); }
+  if (voiceOn){ voiceIdx = idxAtOffset(); voiceTarget = offset; toast("跟读：你念到哪，字就滚到哪。说错重来也能自动找回位置。"); if (playing) startVoice(); }
   else { stopVoice(); lastMarkOff=-1; }
 };
 
-/* ---------------- camera + recording ---------------- */
-let stream=null, recorder=null, chunks=[], lastBlob=null, recStart=0;
+/* ================= camera + recording ================= */
+let stream=null, recorder=null, chunks=[], recT0=0, timeline=[], canvasJob=null, recMeta=null;
 const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 if (!hasCam) $("pvCam").hidden = true;
+const ASPECTS = { raw:null, "9:16":9/16, "16:9":16/9, "1:1":1, "3:4":3/4 };
 async function startCam(){
+  stopTracks();
+  const long = cfg.res >= 1080 ? 1920 : 1280, short = cfg.res >= 1080 ? 1080 : 720;
+  const portrait = innerHeight >= innerWidth;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"user", width:{ideal:1080}, height:{ideal:1920} }, audio:{ echoCancellation:true, noiseSuppression:true } });
-  } catch(e){ toast("摄像头没打开。这个页面在当前环境里可能没有相机权限。", 3800); return false; }
-  const v = $("cam"); v.srcObject = stream; v.hidden = false; $("camShade").hidden = false; await v.play().catch(()=>{});
-  $("pvRec").hidden = false; $("pvCam").setAttribute("aria-pressed","true");
-  if (cfg.guide > 32){ cfg.guide = 24; applyLayout(); syncSheet(); toast("视线线已移到靠近镜头的位置"); }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:cfg.facing, width:{ideal: portrait ? short : long}, height:{ideal: portrait ? long : short}, frameRate:{ideal:30} },
+      audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }
+    });
+  } catch(e){ stream = null; toast(e && e.name==="NotAllowedError" ? "相机或麦克风没有授权。到 Safari 地址栏左边“大小”菜单→网站设置里打开。" : "摄像头打不开：" + (e?.name||"未知错误"), 4500); return false; }
+  const v = $("cam"); v.srcObject = stream; v.hidden = false; v.classList.toggle("mirror", cfg.facing==="user");
+  $("camShade").hidden = false; $("frame").hidden = false; await v.play().catch(()=>{});
+  $("pvRec").hidden = false; $("pvFlip").hidden = false; $("pvCam").setAttribute("aria-pressed","true"); pv.classList.add("oncam");
+  v.onloadedmetadata = v.onresize = () => layoutFrame();
+  applyLayout();
   return true;
 }
+function stopTracks(){ stream?.getTracks().forEach(t=>t.stop()); stream = null; }
 function stopCam(){
   if (recorder) return;
-  stream?.getTracks().forEach(t=>t.stop()); stream = null;
-  const v=$("cam"); v.srcObject=null; v.hidden=true; $("camShade").hidden=true;
-  $("pvRec").hidden = true; $("pvCam").setAttribute("aria-pressed","false");
+  stopTracks();
+  const v=$("cam"); v.srcObject=null; v.hidden=true; $("camShade").hidden=true; $("frame").hidden=true;
+  $("pvRec").hidden = true; $("pvFlip").hidden = true; $("pvCam").setAttribute("aria-pressed","false"); pv.classList.remove("oncam");
+  applyLayout();
 }
 $("pvCam").onclick = () => { if (stream) stopCam(); else startCam(); };
+$("pvFlip").onclick = async () => { if (recorder){ toast("录制中不能切换镜头"); return; } cfg.facing = cfg.facing==="user" ? "environment" : "user"; save(); await startCam(); };
+// Crop rectangle in the source video for the chosen aspect (centered cover crop)
+function cropRect(vw, vh){
+  const a = ASPECTS[cfg.aspect]; if (!a) return { sx:0, sy:0, sw:vw, sh:vh };
+  if (vw/vh > a){ const sw = vh*a; return { sx:(vw-sw)/2, sy:0, sw, sh:vh }; }
+  const sh = vw/a; return { sx:0, sy:(vh-sh)/2, sw:vw, sh };
+}
+// Draw the crop frame (and grid) over the preview so what you see is what gets recorded
+function layoutFrame(){
+  const f = $("frame"), v = $("cam"); if (!stream || !v.videoWidth) return;
+  const W = pv.clientWidth, H = pv.clientHeight, vw = v.videoWidth, vh = v.videoHeight;
+  const s = Math.max(W/vw, H/vh), dx = (W - vw*s)/2, dy = (H - vh*s)/2;
+  const c = cropRect(vw, vh);
+  let x = dx + c.sx*s, y = dy + c.sy*s, w = c.sw*s, h = c.sh*s;
+  if (v.classList.contains("mirror")) x = W - x - w;
+  const L = Math.max(0,x), T = Math.max(0,y), R = Math.min(W, x+w), B = Math.min(H, y+h);
+  Object.assign(f.style, { left:L+"px", top:T+"px", width:(R-L)+"px", height:(B-T)+"px" });
+  f.classList.toggle("raw", !ASPECTS[cfg.aspect]); f.classList.toggle("grid", cfg.grid);
+}
 function pickMime(){
-  const c = ["video/mp4;codecs=avc1","video/mp4","video/webm;codecs=vp9,opus","video/webm"];
+  const c = ["video/mp4;codecs=avc1.640028,mp4a.40.2","video/mp4;codecs=avc1,mp4a.40.2","video/mp4","video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];
   for (const m of c) if (window.MediaRecorder && MediaRecorder.isTypeSupported?.(m)) return m;
   return "";
+}
+function buildRecordStream(){
+  const v = $("cam"), a = ASPECTS[cfg.aspect];
+  if (!a || !v.videoWidth) return stream;
+  const short = cfg.res >= 1080 ? 1080 : 720;
+  const cw = a < 1 ? short : Math.round(short*a), ch = a < 1 ? Math.round(short/a) : short;
+  const cv = document.createElement("canvas"); cv.width = cw; cv.height = ch;
+  const ctx = cv.getContext("2d", { alpha:false });
+  if (!cv.captureStream) return stream;
+  let alive = true;
+  const draw = () => {
+    if (!alive) return;
+    const c = cropRect(v.videoWidth, v.videoHeight);
+    try { ctx.drawImage(v, c.sx, c.sy, c.sw, c.sh, 0, 0, cw, ch); } catch(e){}
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw); else setTimeout(draw, 1000/30);
+  };
+  draw();
+  const vs = cv.captureStream(30);
+  canvasJob = { stop(){ alive = false; vs.getTracks().forEach(t=>t.stop()); } };
+  return new MediaStream([...vs.getVideoTracks(), ...stream.getAudioTracks()]);
+}
+function sampleTimeline(){
+  const t = (performance.now() - recT0)/1000, idx = voiceOn ? voiceIdx : idxAtOffset();
+  const lastS = timeline[timeline.length-1];
+  if (!lastS || idx > lastS.idx) timeline.push({ t, idx });
 }
 $("pvRec").onclick = () => {
   if (!stream) return;
   if (recorder){ recorder.stop(); return; }
-  if (!window.MediaRecorder){ toast("这个浏览器不支持录制"); return; }
+  if (!window.MediaRecorder){ toast("这个浏览器不支持录制，请用 Safari 或 Chrome"); return; }
+  rewindIfEnd();
   startWithCount(() => {
-    chunks = []; const mime = pickMime();
-    try { recorder = new MediaRecorder(stream, mime ? { mimeType:mime, videoBitsPerSecond:6e6 } : undefined); }
-    catch(e){ recorder = null; toast("录制启动失败"); return; }
+    chunks = []; timeline = []; const mime = pickMime();
+    const rs = buildRecordStream();
+    const opts = { videoBitsPerSecond: cfg.res >= 1080 ? 8e6 : 4.5e6, audioBitsPerSecond:128000 }; if (mime) opts.mimeType = mime;
+    try { recorder = new MediaRecorder(rs, opts); }
+    catch(e){ try { recorder = new MediaRecorder(rs); } catch(e2){ recorder = null; canvasJob?.stop(); canvasJob=null; toast("录制启动失败"); return; } }
+    recMeta = { aspect: ASPECTS[cfg.aspect] && rs !== stream ? cfg.aspect : "raw", startIdx: voiceOn ? voiceIdx : idxAtOffset(), title: cur()?.title || "口播", scriptId: curId };
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    recorder.onstop = () => {
-      const type = recorder.mimeType || mime || "video/mp4";
-      lastBlob = new Blob(chunks, { type }); const dur = (Date.now()-recStart)/1000;
-      recorder = null; $("pvRec").classList.remove("on"); setPlaying(false); stopVoice();
-      showResult(dur);
-    };
-    recorder.start(1000); recStart = Date.now(); $("pvRec").classList.add("on");
-    elapsed = 0; setPlaying(true); if (voiceOn) startVoice();
+    recorder.onstop = onRecStop;
+    recorder.start(1000); recT0 = performance.now(); $("pvRec").classList.add("on"); $("pvRec").setAttribute("aria-label","停止录制");
+    elapsed = 0; runStartIdx = recMeta.startIdx; setPlaying(true); if (voiceOn) startVoice();
   });
 };
-function showResult(dur){
-  const url = URL.createObjectURL(lastBlob);
-  const v = $("resVid"); if (v.dataset.url) URL.revokeObjectURL(v.dataset.url); v.src = url; v.dataset.url = url;
-  $("resMeta").textContent = `${fmt(dur)} · ${(lastBlob.size/1048576).toFixed(1)} MB`;
-  $("resHint").textContent = "iPhone 上点“保存到相册 / 分享”，在弹出的菜单里选“存储视频”。";
-  $("scrim").hidden = false; $("result").hidden = false;
+async function onRecStop(){
+  const type = recorder.mimeType || pickMime() || "video/mp4";
+  const blob = new Blob(chunks, { type }), dur = (performance.now()-recT0)/1000, m = measuredCpm();
+  canvasJob?.stop(); canvasJob = null; recorder = null;
+  $("pvRec").classList.remove("on"); $("pvRec").setAttribute("aria-label","开始录制"); setPlaying(false); stopVoice();
+  sampleTimeline();
+  const take = { id:"t"+Date.now().toString(36), scriptId:recMeta.scriptId, title:recMeta.title, created:Date.now(), dur, size:blob.size, type, aspect:recMeta.aspect, cpm:m, srt:makeSrt(timeline, dur), blob };
+  try { await idb.put(take); } catch(e){ toast("录像没能存进浏览器（空间不足？），请马上存到相册", 4000); }
+  openTake(take, true);
 }
-$("resSave").onclick = async () => {
-  if (!lastBlob) return;
-  const ext = lastBlob.type.includes("mp4") ? "mp4" : "webm";
-  const s = cur(); const name = `${(s?.title||"口播").replace(/[\\/:*?"<>|]/g,"").slice(0,30)}-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,"")}.${ext}`;
-  const file = new File([lastBlob], name, { type: lastBlob.type });
-  try {
-    if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:name }); return; }
-  } catch(e){ if (e && e.name==="AbortError") return; }
-  const a = document.createElement("a"); a.href = $("resVid").src; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  $("resHint").textContent = "如果没有开始下载：长按上面的视频，选择“存储视频”。";
-};
-$("resDrop").onclick = () => { $("result").hidden = true; $("scrim").hidden = true; lastBlob = null; };
+/* subtitles from the reading timeline: each chunk starts when the reader reached its first character */
+function timeAt(idx, tl, dur){
+  if (!tl.length) return null;
+  for (let i=0;i<tl.length;i++){ if (tl[i].idx >= idx){ if (i===0) return tl[0].t; const a=tl[i-1], b=tl[i]; return a.t + (b.t-a.t) * ((idx - a.idx) / Math.max(1, b.idx - a.idx)); } }
+  return null;
+}
+function srtTime(s){ s = Math.max(0, s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), sec=Math.floor(s%60), ms=Math.round((s%1)*1000)%1000; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")},${String(ms).padStart(3,"0")}`; }
+function makeSrt(tl, dur){
+  const startIdx = tl[0]?.idx ?? 0, endIdx = tl[tl.length-1]?.idx ?? 0;
+  const list = units.filter(u => u.b > startIdx && u.a < Math.max(endIdx, startIdx + 1));
+  const out = []; let n = 1, prevEnd = 0;
+  list.forEach((u, i) => {
+    let a = timeAt(Math.max(u.a, startIdx), tl, dur); if (a == null) return;
+    // a chunk is shown from the moment the reader reaches it until the next one starts
+    let b = i+1 < list.length ? timeAt(list[i+1].a, tl, dur) : null;
+    if (b == null) b = Math.min(dur, a + Math.max(1.2, (u.b-u.a)/ (scriptCpm()/60)));
+    a = Math.max(0, a - 0.15); b = b - 0.15; if (b - a < 0.6) b = a + 0.6; b = Math.min(b, dur);
+    if (prevEnd > a) a = prevEnd; prevEnd = b;
+    if (b <= a) return;
+    out.push(`${n++}\n${srtTime(a)} --> ${srtTime(b)}\n${u.text.replace(/[，。、；：！？,.;:!?]/g," ").replace(/\s+/g," ").trim()}\n`);
+  });
+  return out.join("\n");
+}
 
-/* ---------------- settings sheet ---------------- */
-const rng = [["sFont","oFont","font",v=>v+"px"],["sLH","oLH","lh",v=>(+v).toFixed(2)],["sMargin","oMargin","margin",v=>v+"%"],["sGuide","oGuide","guide",v=>v+"%"],["sCpm","oCpm","cpm",v=>v]];
-rng.forEach(([i,o,k,f]) => { $(i).oninput = () => { cfg[k] = +$(i).value; $(o).textContent = f(cfg[k]); save(); if (!pv.hidden) applyLayout(); if (k==="cpm"){ edStats(); } }; });
-function seg(id, key, opts){
+/* ================= take player ================= */
+let openTk = null, resDelArmed = false;
+function openTake(tk, fresh){
+  openTk = tk; resDelArmed = false; $("resDel").textContent = "删除";
+  const v = $("resVid"); if (v.dataset.url) URL.revokeObjectURL(v.dataset.url);
+  const url = URL.createObjectURL(tk.blob); v.src = url; v.dataset.url = url;
+  $("resTitle").textContent = fresh ? "录好了" : (tk.title || "录像");
+  $("resMeta").innerHTML = `<span><b class="num">${fmt(tk.dur)}</b></span><span><b class="num">${(tk.size/1048576).toFixed(1)}</b> MB</span>${tk.aspect && tk.aspect!=="raw" ? `<span>画幅 <b class="num">${tk.aspect}</b></span>` : ""}${tk.cpm ? `<span>实测 <b class="num">${tk.cpm}</b> 字/分钟</span>` : ""}<span>${fmtDate(tk.created)}</span>`;
+  $("resHint").textContent = fresh ? "已自动存进“我的录像”。iPhone 点“存到相册 / 分享”，再选“存储视频”。字幕按你实际念的节奏生成，剪映里可以直接导入 SRT。" : "";
+  $("srtBox").hidden = true;
+  closeSheets(); openSheet("result");
+}
+const takeName = (tk, ext) => `${(tk.title||"口播").replace(/[\\/:*?"<>|\s]/g,"").slice(0,24)}-${new Date(tk.created).toISOString().slice(0,16).replace(/[-:T]/g,"")}.${ext}`;
+$("resSave").onclick = async () => {
+  if (!openTk) return;
+  const r = await shareFile(openTk.blob, takeName(openTk, openTk.type.includes("mp4") ? "mp4" : "webm"));
+  if (r==="download") $("resHint").textContent = "如果没有开始下载：长按上面的视频，选“存储视频”。";
+  if (r==="fail") $("resHint").textContent = "保存没成功。长按上面的视频，选“存储视频”。";
+};
+$("resSrt").onclick = async () => {
+  if (!openTk) return;
+  if (!openTk.srt){ toast("这条录像没有字幕时间轴"); return; }
+  const box = $("srtBox"); box.value = openTk.srt; box.hidden = false;
+  const r = await shareFile(new Blob([openTk.srt], { type:"text/plain" }), takeName(openTk, "srt"));
+  if (r==="fail" || r==="download"){ const ok = await copyText(openTk.srt); $("resHint").textContent = ok ? "字幕已复制，也可以在下面直接选取。" : "在下面选取字幕文本复制。"; }
+};
+$("resDel").onclick = async () => {
+  if (!openTk) return;
+  if (!resDelArmed){ resDelArmed = true; $("resDel").textContent = "确认删除"; setTimeout(()=>{ resDelArmed=false; $("resDel").textContent="删除"; }, 3000); return; }
+  try { await idb.del(openTk.id); } catch(e){}
+  openTk = null; closeSheets(); toast("录像已删除"); renderTakes();
+};
+
+/* ================= settings ================= */
+const rng = [["sFont","oFont","font",v=>v+"px"],["sLH","oLH","lh",v=>(+v).toFixed(2)],["sMargin","oMargin","margin",v=>v+"%"],["sGuide","oGuide","guide",v=>v+"%"],["sCpm","oCpm","cpm",v=>v],["sWinH","oWinH","winH",v=>v+"%"],["sShade","oShade","shade",v=>v+"%"]];
+rng.forEach(([i,o,k,f]) => { $(i).oninput = () => { cfg[k] = +$(i).value; $(o).textContent = f(cfg[k]); save(); if (!pv.hidden){ const idx = voiceOn ? voiceIdx : idxAtOffset(); applyLayout(); offset = targetForIdx(idx); voiceTarget = offset; } if (k==="cpm") edStats(); }; });
+function seg(id, key, opts, after){
   const box = $(id); box.textContent = "";
   for (const [val, label, sw] of opts){
     const b = document.createElement("button"); b.type="button";
     if (sw){ b.className="sw"; b.style.background=val; b.setAttribute("aria-label",label); } else b.textContent = label;
     b.setAttribute("aria-pressed", String(cfg[key]===val));
-    b.onclick = () => { cfg[key] = val; save(); syncSheet(); if (!pv.hidden){ if (key==="dim"){ setRead(0); readIdx=0; lastMarkOff=-1; if (voiceOn) setRead(voiceIdx); } applyLayout(); } };
+    b.onclick = () => { cfg[key] = val; save(); syncSheet(); after?.(); if (!pv.hidden){ const idx = voiceOn ? voiceIdx : idxAtOffset(); if (key==="dim"){ setRead(0); readIdx=0; lastMarkOff=-1; if (voiceOn) setRead(voiceIdx); } applyLayout(); offset = targetForIdx(idx); voiceTarget = offset; } };
     box.appendChild(b);
   }
 }
 function syncSheet(){
   rng.forEach(([i,o,k,f]) => { $(i).value = cfg[k]; $(o).textContent = f(cfg[k]); });
-  seg("sCount","count",[[0,"无"],[3,"3 秒"],[5,"5 秒"]]);
+  seg("sFace","face",[["sans","黑体"],["serif","宋体"]]);
+  seg("sWeight","weight",[[500,"常规"],[700,"粗"],[900,"特粗"]]);
+  seg("sColor","color",[["#f1ede4","米白",1],["#ffffff","纯白",1],["#f2d36b","暖黄",1],["#9fe0b0","浅绿",1],["#9cc8ff","浅蓝",1]]);
   seg("sAlign","align",[["left","左对齐"],["center","居中"]]);
-  seg("sMirror","mirror",[["none","正常"],["h","左右"],["v","上下"],["hv","都翻"]]);
-  seg("sColor","color",[["#f1ede4","米白",1],["#ffffff","纯白",1],["#f2d36b","暖黄",1],["#9fe0b0","浅绿",1]]);
+  seg("sCount","count",[[0,"无"],[3,"3 秒"],[5,"5 秒"],[10,"10 秒"]]);
+  seg("sBeep","beep",[[true,"开"],[false,"关"]]);
   seg("sDim","dim",[[true,"开"],[false,"关"]]);
+  seg("sMirror","mirror",[["none","正常"],["h","左右"],["v","上下"],["hv","都翻"]]);
+  seg("sWin","win",[["full","全屏"],["top","顶部小窗"]]);
+  seg("sAspect","aspect",[["raw","原始"],["9:16","9:16"],["3:4","3:4"],["1:1","1:1"],["16:9","16:9"]]);
+  seg("sRes","res",[[720,"720p"],[1080,"1080p"]], () => { if (stream && !recorder) startCam(); });
+  seg("sGrid","grid",[[false,"关"],[true,"开"]]);
 }
-function openSheet(){ syncSheet(); $("scrim").hidden=false; $("sheet").hidden=false; if (playing) setPlaying(false); }
-function closeSheets(){ $("sheet").hidden=true; if ($("result").hidden) $("scrim").hidden=true; }
-$("libSet").onclick = openSheet; $("pvSet").onclick = openSheet;
-$("scrim").onclick = () => { if (!$("result").hidden) return; closeSheets(); };
+let openSheetId = null;
+function openSheet(id){ if (id==="sheet") syncSheet(); closeSheets(); $("scrim").hidden=false; $(id).hidden=false; openSheetId = id; if (playing && !recorder) setPlaying(false), stopVoice(); }
+function closeSheets(){ ["sheet","outlineSheet","takesSheet","result"].forEach(i => $(i).hidden = true); $("scrim").hidden = true; openSheetId = null; const v=$("resVid"); try { v.pause(); } catch(e){} }
+$("libSet").onclick = () => openSheet("sheet"); $("pvSet").onclick = () => openSheet("sheet");
+$("scrim").onclick = closeSheets;
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = closeSheets);
 
-/* ---------------- boot ---------------- */
+/* ================= boot ================= */
 syncSheet(); renderList(); show("vLib");
+if (navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
 })();
 </script>
 </body></html>
