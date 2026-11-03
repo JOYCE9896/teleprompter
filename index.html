@@ -93,8 +93,8 @@ h2.sec{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.08em;mar
 
 /* ---------- prompter ---------- */
 #pv{position:fixed;inset:0;z-index:20;background:#000;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
-#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-#cam.mirror{transform:scaleX(-1)}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#camInfo{position:absolute;left:10px;bottom:10px;z-index:3;font:12px/1.3 var(--f-ui);color:#fff;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:6px;pointer-events:none}
 #camShade{position:absolute;inset:0;background:#000;pointer-events:none}
 #frame{position:absolute;pointer-events:none;border:1px solid rgba(255,255,255,.35);box-shadow:0 0 0 100vmax rgba(0,0,0,.5)}
 #frame.raw{border:0;box-shadow:none}
@@ -197,7 +197,7 @@ textarea.srt{width:100%;height:120px;font:12px/1.5 var(--f-num);background:var(-
 
 <!-- ============ Prompter ============ -->
 <div id="pv" hidden>
-  <video id="cam" playsinline muted hidden></video>
+  <video id="cam" playsinline muted hidden></video><div id="camInfo" hidden></div>
   <div id="camShade" hidden></div>
   <div id="frame" hidden></div>
   <div id="stage">
@@ -324,9 +324,9 @@ Agent 会自己打开网页，查班次，比价格，最后把订单号发给�
   updated: Date.now()
 };
 const DEF = { cpm:240, font:46, lh:1.45, margin:6, guide:28, count:3, align:"left", mirror:"none", color:"#f1ede4",
-  dim:true, face:"sans", weight:700, beep:true, win:"full", winH:36, aspect:"raw", res:1080, grid:false, shade:45, facing:"user" };
+  dim:true, face:"sans", weight:700, beep:true, win:"full", winH:36, aspect:"raw", res:2160, grid:false, shade:45, facing:"user" };
 let S = { scripts:[SAMPLE], settings:{...DEF} };
-try { const raw = localStorage.getItem(KEY); if (raw) { const o = JSON.parse(raw); if (o && Array.isArray(o.scripts)) S = { scripts:o.scripts, settings:{...DEF, ...(o.settings||{})} }; } } catch(e) {}
+try { const raw = localStorage.getItem(KEY); if (raw) { const o = JSON.parse(raw); if (o && Array.isArray(o.scripts)) { S = { scripts:o.scripts, settings:{...DEF, ...(o.settings||{})} }; if (!S.settings.v4k){ S.settings.res = 2160; S.settings.v4k = 1; } } } } catch(e) {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
 const cfg = S.settings;
 if (cfg.margin > 30) cfg.margin = DEF.margin;
@@ -755,26 +755,39 @@ if (!hasCam) $("pvCam").hidden = true;
 const ASPECTS = { raw:null, "9:16":9/16, "16:9":16/9, "1:1":1, "3:4":3/4 };
 async function startCam(){
   stopTracks();
-  const long = cfg.res >= 1080 ? 1920 : 1280, short = cfg.res >= 1080 ? 1080 : 720;
+  const short = cfg.res, long = Math.round(cfg.res*16/9);
   const portrait = innerHeight >= innerWidth;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:cfg.facing, width:{ideal: portrait ? short : long}, height:{ideal: portrait ? long : short}, frameRate:{ideal:30} },
+      video:{ facingMode:cfg.facing, width:{ideal: portrait ? short : long}, height:{ideal: portrait ? long : short}, frameRate:{ideal:30, max:30} },
       audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }
     });
   } catch(e){ stream = null; toast(e && e.name==="NotAllowedError" ? "相机或麦克风没有授权。到 Safari 地址栏左边“大小”菜单→网站设置里打开。" : "摄像头打不开：" + (e?.name||"未知错误"), 4500); return false; }
-  const v = $("cam"); v.srcObject = stream; v.hidden = false; v.classList.toggle("mirror", cfg.facing==="user");
+  const v = $("cam"); v.srcObject = stream; v.hidden = false; v.classList.remove("mirror");
+  camOrient = innerHeight >= innerWidth;
   $("camShade").hidden = false; $("frame").hidden = false; await v.play().catch(()=>{});
   $("pvRec").hidden = false; $("pvFlip").hidden = false; $("pvCam").setAttribute("aria-pressed","true"); pv.classList.add("oncam");
-  v.onloadedmetadata = v.onresize = () => layoutFrame();
+  v.onloadedmetadata = v.onresize = () => { layoutFrame(); showCamInfo(); };
   applyLayout();
   return true;
 }
+// Show what the camera actually delivers, so 4K/30 can be checked on the phone
+let camOrient = null;
+function showCamInfo(){
+  const el = $("camInfo"), v = $("cam"); if (!el) return;
+  if (!stream){ el.hidden = true; return; }
+  const st = stream.getVideoTracks()[0]?.getSettings?.() || {};
+  const w = v.videoWidth || st.width, h = v.videoHeight || st.height, fps = st.frameRate ? Math.round(st.frameRate) : "?";
+  const k = Math.min(w,h) >= 2160 ? "4K" : Math.min(w,h) >= 1080 ? "1080p" : Math.min(w,h) + "p";
+  el.textContent = `${w}×${h} · ${fps}fps · ${k}`; el.hidden = false;
+}
+// Turning the phone changes portrait/landscape: reopen the camera so the video follows
+addEventListener("resize", () => { if (!stream || recorder) return; const p = innerHeight >= innerWidth; if (camOrient !== null && p !== camOrient){ camOrient = p; startCam(); } });
 function stopTracks(){ stream?.getTracks().forEach(t=>t.stop()); stream = null; }
 function stopCam(){
   if (recorder) return;
   stopTracks();
-  const v=$("cam"); v.srcObject=null; v.hidden=true; $("camShade").hidden=true; $("frame").hidden=true;
+  const v=$("cam"); v.srcObject=null; v.hidden=true; $("camInfo").hidden=true; $("camShade").hidden=true; $("frame").hidden=true;
   $("pvRec").hidden = true; $("pvFlip").hidden = true; $("pvCam").setAttribute("aria-pressed","false"); pv.classList.remove("oncam");
   applyLayout();
 }
@@ -790,10 +803,9 @@ function cropRect(vw, vh){
 function layoutFrame(){
   const f = $("frame"), v = $("cam"); if (!stream || !v.videoWidth) return;
   const W = pv.clientWidth, H = pv.clientHeight, vw = v.videoWidth, vh = v.videoHeight;
-  const s = Math.max(W/vw, H/vh), dx = (W - vw*s)/2, dy = (H - vh*s)/2;
+  const s = Math.min(W/vw, H/vh), dx = (W - vw*s)/2, dy = (H - vh*s)/2;
   const c = cropRect(vw, vh);
   let x = dx + c.sx*s, y = dy + c.sy*s, w = c.sw*s, h = c.sh*s;
-  if (v.classList.contains("mirror")) x = W - x - w;
   const L = Math.max(0,x), T = Math.max(0,y), R = Math.min(W, x+w), B = Math.min(H, y+h);
   Object.assign(f.style, { left:L+"px", top:T+"px", width:(R-L)+"px", height:(B-T)+"px" });
   f.classList.toggle("raw", !ASPECTS[cfg.aspect]); f.classList.toggle("grid", cfg.grid);
@@ -806,7 +818,7 @@ function pickMime(){
 function buildRecordStream(){
   const v = $("cam"), a = ASPECTS[cfg.aspect];
   if (!a || !v.videoWidth) return stream;
-  const short = cfg.res >= 1080 ? 1080 : 720;
+  const short = Math.min(cfg.res, v.videoWidth, v.videoHeight);
   const cw = a < 1 ? short : Math.round(short*a), ch = a < 1 ? Math.round(short/a) : short;
   const cv = document.createElement("canvas"); cv.width = cw; cv.height = ch;
   const ctx = cv.getContext("2d", { alpha:false });
@@ -836,7 +848,7 @@ $("pvRec").onclick = () => {
   startWithCount(() => {
     chunks = []; timeline = []; const mime = pickMime();
     const rs = buildRecordStream();
-    const opts = { videoBitsPerSecond: cfg.res >= 1080 ? 8e6 : 4.5e6, audioBitsPerSecond:128000 }; if (mime) opts.mimeType = mime;
+    const opts = { videoBitsPerSecond: cfg.res >= 2160 ? 45e6 : cfg.res >= 1080 ? 16e6 : 8e6, audioBitsPerSecond:128000 }; if (mime) opts.mimeType = mime;
     try { recorder = new MediaRecorder(rs, opts); }
     catch(e){ try { recorder = new MediaRecorder(rs); } catch(e2){ recorder = null; canvasJob?.stop(); canvasJob=null; toast("录制启动失败"); return; } }
     recMeta = { aspect: ASPECTS[cfg.aspect] && rs !== stream ? cfg.aspect : "raw", startIdx: voiceOn ? voiceIdx : idxAtOffset(), title: cur()?.title || "口播", scriptId: curId };
@@ -938,7 +950,7 @@ function syncSheet(){
   seg("sMirror","mirror",[["none","正常"],["h","左右"],["v","上下"],["hv","都翻"]]);
   seg("sWin","win",[["full","全屏"],["top","顶部小窗"]]);
   seg("sAspect","aspect",[["raw","原始"],["9:16","9:16"],["3:4","3:4"],["1:1","1:1"],["16:9","16:9"]]);
-  seg("sRes","res",[[720,"720p"],[1080,"1080p"]], () => { if (stream && !recorder) startCam(); });
+  seg("sRes","res",[[720,"720p"],[1080,"1080p"],[2160,"4K"]], () => { if (stream && !recorder) startCam(); });
   seg("sGrid","grid",[[false,"关"],[true,"开"]]);
 }
 let openSheetId = null;
